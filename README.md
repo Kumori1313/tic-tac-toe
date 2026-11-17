@@ -1,6 +1,6 @@
 # Tic-Tac-Toe
 
-The first game for [Game Hub](https://github.com/Kumori1313/game-hub). Guest entry is implemented: enter or change a display name, restore your anonymous session, and navigate between the hub and tic-tac-toe. Lobbies and gameplay arrive in later phases.
+The first game for [Game Hub](https://github.com/Kumori1313/game-hub). Guest entry is implemented: enter or change a display name, restore your anonymous session, and navigate between the hub and tic-tac-toe. Public lobbies and waiting rooms are implemented in the game site. Playable moves arrive in Phase 6.
 
 ## Local development
 
@@ -26,9 +26,9 @@ Configure `.env.local` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_K
 - `npm run build`: produce `dist/` with the `/tic-tac-toe/` base path.
 - `npm run preview`: serve the production build locally.
 - `npm test`: run guest validation and session-service checks with Node’s built-in test runner.
-- `npm run check:backend`: verify local anonymous sign-in, identity, and an empty Data API. Creates one local guest, then signs out; no hosted requests are allowed.
+- `npm run check:backend`: verify local anonymous sign-in, identity, and restricted lobby Data API. Creates one local guest, then signs out; no hosted requests are allowed.
 
-Guest behavior is tested with Node’s built-in runner; no coverage threshold is configured. Database authorization and concurrency tests arrive with the schema and game rules. Never treat a successful build as gameplay validation.
+Guest behavior is tested with Node’s built-in runner; no coverage threshold is configured. Local API integration tests cover lobby authorization and concurrency; move-validation tests arrive with gameplay. Never treat a successful build as gameplay validation.
 
 ## Deployment
 
@@ -53,3 +53,7 @@ The shared visual language uses original SVG artwork (`public/art/playfield.svg`
 A small inline head script selects the saved theme before paint. If storage is unavailable, dark remains the default and the toggle still works for the current page. `src/theme.js` also synchronizes other tabs. `src/illustration.js` updates the preview only in response to scroll or guest progress and while visible; reduced-motion mode displays a static final board. There is no autonomous animation loop or playable board in this phase.
 
 The hub’s [component guide](https://github.com/Kumori1313/game-hub/blob/main/docs/ui-components.md) documents matching styles, future screen sketches, and verification. Keep shared presentation files aligned across repositories until they are extracted into a package.
+
+## Public lobbies
+
+The tic-tac-toe site supports public discovery, creating/joining/leaving two-player rooms, host-only start, refresh recovery, connection feedback, and interruption. A started match is a verified shared session; gameplay is still in development. See the [lobby contract](https://github.com/Kumori1313/game-hub/blob/main/docs/lobby-contract.md) for API permissions, the 90-second lease, scheduled cleanup, and the seven-day retention policy.

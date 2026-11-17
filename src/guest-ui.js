@@ -35,7 +35,7 @@ export function mountGuestEntry({ client, gamePage = false }) {
       ? (name ? 'Guest' : 'Enter your name')
       : (name ? 'Games' : 'Enter your name');
     form.setAttribute('aria-busy', String(busy));
-    document.dispatchEvent(new CustomEvent('guest-state', { detail: { ready: Boolean(name) && ready && !busy && !editing } }));
+    document.dispatchEvent(new CustomEvent('guest-state', { detail: { ready: Boolean(name) && ready && !busy && !editing, userId: user?.id ?? null } }));
   }
 
   function showError(message) {

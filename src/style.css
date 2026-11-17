@@ -170,3 +170,20 @@ input[aria-invalid='true'] { border-color: var(--error); }
   .content-layout { padding-top: 28px; gap: 28px; }
   .diagram-wrap { padding-top: 8px; }
 }
+
+.lobby-section { padding: 24px; }
+.lobby-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0; }
+.lobby-list, .member-list { list-style: none; padding: 0; margin: 20px 0; }
+.lobby-row, .member-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 0; border-top: 1px solid var(--line); }
+.lobby-description, .member-row { overflow-wrap: anywhere; min-width: 0; }
+.lobby-description strong, .lobby-description .hint { display: block; }
+.lobby-description .hint { margin: 4px 0 0; }
+.lobby-row button { flex-shrink: 0; }
+.lobby-row button:disabled { cursor: default; }
+.member-row { align-items: start; flex-direction: column; gap: 4px; }
+.member-row .hint { margin: 0; }
+#room-title { font-family: Georgia, serif; font-size: 25px; margin: 18px 0; }
+#lobby-status, #room-message { color: var(--muted); font-size: 13px; }
+#room-connection:empty, #room-message:empty, #lobby-error:empty, #lobby-status:empty { display: none; }
+.back-link { display: inline-block; padding: 12px 0; font-size: 12px; }
+@media (max-width: 390px) { .lobby-section { padding: 18px; } .lobby-row { align-items: start; flex-direction: column; } }
