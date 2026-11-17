@@ -91,14 +91,14 @@ export function mountGuestEntry({ client, gamePage = false }) {
       ready = true;
       input.value = displayName(user) ?? '';
       status.textContent = 'Name saved.';
-    } catch {
+    } catch (failure) {
       if (ticket !== operation) return;
       try { validateDisplayName(input.value); }
       catch (validation) {
         input.setAttribute('aria-invalid', 'true');
         error.textContent = validation.message;
       }
-      if (!error.textContent) showError('We couldn’t save your name. Check your connection and try submitting again.');
+      if (!error.textContent) showError(failure.status === 429 ? 'Too many sign-in attempts. Try again later.' : 'We couldn’t save your name. Check your connection and try submitting again.');
       status.textContent = 'Your name has not been saved.';
     } finally {
       if (ticket === operation) {
@@ -133,6 +133,17 @@ export function mountGuestEntry({ client, gamePage = false }) {
   client?.auth.onAuthStateChange((event) => {
     // Defer SDK calls until the auth callback has released its lock.
     if (!busy && ['SIGNED_OUT', 'USER_UPDATED'].includes(event)) setTimeout(restore, 0);
+  });
+  document.addEventListener('guest-session-ended', async () => {
+    ++operation;
+    busy = true;
+    render();
+    try { await client?.auth.signOut({ scope: 'local' }); } finally {
+      user = null; ready = false; editing = false; busy = false;
+      status.textContent = '';
+      error.textContent = 'Your session ended. Enter your name again.';
+      render(); input.focus();
+    }
   });
   restore();
 }

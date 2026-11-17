@@ -16,7 +16,7 @@ try {
   const response = await fetch(`${url}/rest/v1/`, { headers: { apikey: key, Authorization: `Bearer ${data.session.access_token}` } });
   assert.equal(response.status, 200, 'PostgREST must be reachable.');
   const spec = await response.json();
-  const allowed = new Set(['/', '/game_catalog', '/lobby_summaries', '/rpc/lobby_action']);
+  const allowed = new Set(['/', '/game_catalog', '/lobby_summaries', '/rpc/lobby_action', '/rpc/play_move']);
   assert.deepEqual(Object.keys(spec.paths).filter(path => !allowed.has(path)), [], 'Only catalog, public lobby summaries, and the guarded lobby API may be exposed.');
   const { data: games, error: catalogError } = await client.from('game_catalog').select('id');
   assert.ifError(catalogError);

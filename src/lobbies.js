@@ -87,12 +87,13 @@ export function mountLobbies(client) {
   }
   function renderRoom() {
     if (!room) return;
-    const terminal = room.status === 'closed';
+    const finished = room.status === 'finished';
+    const terminal = room.status === 'closed' || finished;
     const playing = room.status === 'playing';
     discovery.hidden = true;
     roomView.hidden = false;
-    document.querySelector('#room-title').textContent = playing ? 'Match ready' : terminal ? 'Lobby closed' : room.title;
-    document.querySelector('#room-message').textContent = terminal ? room.reason : playing ? 'Gameplay is in development.' : room.members.length < 2 ? 'Waiting for another player.' : '';
+    document.querySelector('#room-title').textContent = finished ? 'Match finished' : playing ? 'Match ready' : terminal ? 'Lobby closed' : room.title;
+    document.querySelector('#room-message').textContent = finished ? (room.match?.winner ? `${room.match.winner} won.` : 'Draw.') : terminal ? room.reason : playing ? 'Gameplay is in development.' : room.members.length < 2 ? 'Waiting for another player.' : '';
     document.querySelector('#room-connection').textContent = terminal ? '' : !navigator.onLine ? 'Offline. Reconnect to keep your seat.' : !roomOnline ? 'Reconnecting…' : '';
     members.replaceChildren();
     for (const member of [...room.members].sort((a, b) => a.mark === b.mark ? 0 : a.mark === 'X' ? -1 : 1)) {
@@ -107,7 +108,7 @@ export function mountLobbies(client) {
     back.hidden = !terminal;
     leave.textContent = playing ? 'Leave match' : 'Leave lobby';
     setBusy(busy);
-    const mode = terminal ? 'closed' : playing ? 'playing' : 'waiting';
+    const mode = finished ? 'finished' : terminal ? 'closed' : playing ? 'playing' : 'waiting';
     if (mode !== lastView) {
       lastView = mode;
       if (playing) editUrl(roomId, true);
@@ -123,7 +124,7 @@ export function mountLobbies(client) {
       const snapshot = await action(heartbeat ? 'heartbeat' : 'snapshot');
       if (ticket !== generation || !roomId || request < appliedSequence) return;
       appliedSequence = request;
-      if (room && ({ waiting: 0, playing: 1, closed: 2 }[snapshot?.status] < { waiting: 0, playing: 1, closed: 2 }[room.status])) return;
+      if (room && ({ waiting: 0, playing: 1, closed: 2, finished: 2 }[snapshot?.status] < { waiting: 0, playing: 1, closed: 2, finished: 2 }[room.status])) return;
       if (!snapshot || !snapshot.members?.some(m => m.user_id === userId)) throw new Error('Your seat is no longer available.');
       room = snapshot;
       roomOnline = true;
@@ -131,6 +132,8 @@ export function mountLobbies(client) {
     } catch (failure) {
       if (ticket !== generation) return;
       roomOnline = false;
+      if (failure.code === 'PT401') { document.dispatchEvent(new Event('guest-session-ended')); return; }
+      if (failure.code === 'PT429') { message(failure.message); renderRoom(); return; }
       if (failure.code === '42501' || failure.code === 'P0002' || failure.message === 'Your seat is no longer available.') {
         message('Your lobby is no longer available. Choose another lobby.');
         await resetRoom();
@@ -186,7 +189,8 @@ export function mountLobbies(client) {
     setBusy(true); message('');
     try { await task(); }
     catch (failure) {
-      message(['P0001', 'P0002', '42501'].includes(failure.code) ? failure.message : 'Couldn’t update the lobby. Check your connection and try again.');
+      if (failure.code === 'PT401') { document.dispatchEvent(new Event('guest-session-ended')); return; }
+      message(['P0001', 'P0002', '42501', 'PT429'].includes(failure.code) ? failure.message : 'Couldn’t update the lobby. Check your connection and try again.');
       if (roomId && !room) await resetRoom();
       else if (!roomId) refreshList();
     } finally { setBusy(false); }

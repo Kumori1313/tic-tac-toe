@@ -57,3 +57,7 @@ The hub’s [component guide](https://github.com/Kumori1313/game-hub/blob/main/d
 ## Public lobbies
 
 The tic-tac-toe site supports public discovery, creating/joining/leaving two-player rooms, host-only start, refresh recovery, connection feedback, and interruption. A started match is a verified shared session; gameplay is still in development. See the [lobby contract](https://github.com/Kumori1313/game-hub/blob/main/docs/lobby-contract.md) for API permissions, the 90-second lease, scheduled cleanup, and the seven-day retention policy.
+
+## Backend security
+
+The shared backend now validates moves and results transactionally; the playable board remains Phase 6. See the [hub security review](https://github.com/Kumori1313/game-hub/blob/main/docs/security-review.md) for the access model, limits, and local integration tests. Browser builds enforce a generated CSP and reject private credentials in frontend settings.
