@@ -32,8 +32,8 @@ export function mountGuestEntry({ client, gamePage = false }) {
     nameLabel.textContent = name ?? '';
     selection.hidden = !ready || !name || editing || busy || !navigator.onLine;
     document.querySelector('#entry-title').textContent = gamePage
-      ? (name ? 'You’re ready for Tic-Tac-Toe.' : 'Enter as a guest')
-      : (name ? 'Choose your next game.' : 'What should we call you?');
+      ? (name ? 'Guest' : 'Enter your name')
+      : (name ? 'Games' : 'Enter your name');
     form.setAttribute('aria-busy', String(busy));
     document.dispatchEvent(new CustomEvent('guest-state', { detail: { ready: Boolean(name) && ready && !busy && !editing } }));
   }
@@ -60,7 +60,7 @@ export function mountGuestEntry({ client, gamePage = false }) {
       ready = true;
       const name = displayName(user);
       if (!editing && name) input.value = name;
-      status.textContent = name ? 'Guest session ready.' : (gamePage ? 'Enter a name to continue. No account or password needed.' : 'No account or password needed.');
+      status.textContent = '';
     } catch {
       if (ticket !== operation) return;
       status.textContent = 'Guest session could not be checked.';
@@ -90,7 +90,7 @@ export function mountGuestEntry({ client, gamePage = false }) {
       editing = false;
       ready = true;
       input.value = displayName(user) ?? '';
-      status.textContent = 'Guest session ready.';
+      status.textContent = 'Name saved.';
     } catch {
       if (ticket !== operation) return;
       try { validateDisplayName(input.value); }
