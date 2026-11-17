@@ -3,14 +3,14 @@
   font-family: 'Segoe UI', system-ui, sans-serif;
   --page: #151719; --surface: #1d2021; --text: #f0ece3; --muted: #b6b9b4;
   --line: #43494a; --accent: #bde8cc; --accent-ink: #152b20; --plum: #d5a5ca;
-  --error: #ffb4a7; --field: #151719; --focus: #e8c77f; --grid: #626f69;
+  --control-line: #748078; --error: #ffb4a7; --field: #151719; --focus: #e8c77f; --grid: #626f69;
   background: var(--page); color: var(--text);
 }
 :root[data-theme='light'] {
   color-scheme: light;
   --page: #f5f3eb; --surface: #eeece3; --text: #232924; --muted: #525b54;
   --line: #bbbeb2; --accent: #28583e; --accent-ink: #fffdf6; --plum: #794a75;
-  --error: #a32b21; --field: #fffdf7; --focus: #7c4817; --grid: #929e92;
+  --control-line: #747c70; --error: #a32b21; --field: #fffdf7; --focus: #7c4817; --grid: #929e92;
 }
 * { box-sizing: border-box; }
 html { scroll-padding-top: 28px; }
@@ -60,12 +60,12 @@ h2 { font-family: Georgia, 'Times New Roman', serif; font-size: 34px; letter-spa
 #guest-status { color: var(--muted); font-size: 14px; margin-bottom: 22px; }
 label { display: block; font-size: 12px; margin-bottom: 10px; font-weight: 600; }
 .input-line { display: flex; align-items: stretch; gap: 10px; }
-input { color: var(--text); background: var(--field); border: 1px solid var(--line); border-radius: 3px; padding: 14px 16px; min-height: 49px; min-width: 0; width: 100%; font-size: 14px; }
+input { color: var(--text); background: var(--field); border: 1px solid var(--control-line); border-radius: 3px; padding: 14px 16px; min-height: 49px; min-width: 0; width: 100%; font-size: 14px; }
 input::placeholder { color: var(--muted); opacity: 1; }
 input[aria-invalid='true'] { border-color: var(--error); }
 .button { display: inline-flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 49px; padding: 13px 20px; border: 1px solid transparent; border-radius: 3px; text-decoration: none; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 650; white-space: nowrap; }
 .button:hover { filter: brightness(1.08); }
-.secondary { display: inline-flex; justify-content: space-between; gap: 16px; align-items: center; min-height: 44px; border: 1px solid var(--line); background: transparent; border-radius: 3px; color: var(--text); padding: 10px 14px; font-size: 12px; }
+.secondary { display: inline-flex; justify-content: space-between; gap: 16px; align-items: center; min-height: 44px; border: 1px solid var(--control-line); background: transparent; border-radius: 3px; color: var(--text); padding: 10px 14px; font-size: 12px; }
 .hint { color: var(--muted); font-size: 11px; line-height: 1.8; margin-top: 12px; }
 .error { color: var(--error); font-size: 13px; line-height: 1.6; }
 .error:empty { margin: 0; }
