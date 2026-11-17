@@ -101,7 +101,6 @@ input[aria-invalid='true'] { border-color: var(--error); }
 .cross { stroke: var(--plum); }
 .nought { stroke: var(--accent); }
 .win-line { stroke-width: 1.5; stroke-dasharray: 4 6; }
-.diagram-corner { position: absolute; right: -4px; top: 20px; color: var(--accent); font-size: 25px; }
 
 
 
@@ -165,7 +164,7 @@ input[aria-invalid='true'] { border-color: var(--error); }
 .privacy-note { max-width: 1232px; margin: auto; color: var(--muted); font-size: 11px; line-height: 1.7; }
 .privacy-note summary { cursor: pointer; width: fit-content; padding: 8px 0; }
 .privacy-note summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
-.privacy-note p { margin: 8px 0; max-width: 620px; }
+.privacy-note p { margin: 8px 0; }
 @media (max-width: 760px) {
   .side-rail { max-width: 240px; justify-self: center; }
   .content-layout { padding-top: 28px; gap: 28px; }
