@@ -202,7 +202,12 @@ export function mountLobbies(client) {
     await perform(async () => {
       if (requested) {
         try { await enterRoom(requested); }
-        catch { await resetRoom(); message('You can’t enter that lobby. Join one from the list.'); }
+        catch {
+          await resetRoom();
+          const current = await action('current', null);
+          if (current) await enterRoom(current);
+          message(current ? 'You can’t enter that lobby. Your current lobby has been restored.' : 'You can’t enter that lobby. Join one from the list.');
+        }
       } else {
         const current = await action('current', null);
         if (current) await enterRoom(current);
