@@ -1,13 +1,21 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="Two players. Nine squares. One classic game." />
+    <script>
+      (() => {
+        let theme = 'dark';
+        try { if (localStorage.getItem('game-hub-theme') === 'light') theme = 'light'; } catch {}
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
     <title>Tic-Tac-Toe</title>
   </head>
   <body>
-    <main id="app"></main>
+    <div id="app"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

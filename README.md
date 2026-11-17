@@ -45,3 +45,11 @@ Use ES modules, two-space indentation, single quotes in JavaScript, and kebab-ca
 Both sites use the same Supabase project and `game-hub-auth` browser storage key. Display names are trimmed, limited to 24 Unicode code points, and saved in Auth `user_metadata.display_name` alongside the guest UUID. Names are untrusted labels, never authorization claims. User-visible names are rendered with `textContent`.
 
 Production navigation uses the two project paths on the same origin, so the session survives navigation. Different local dev ports do not share browser storage. Clearing site data or switching devices loses the guest identity; a missing session prompts for entry again. Network failures preserve saved sessions and entered names.
+
+## Visual design and themes
+
+The shared visual language uses original SVG artwork (`public/art/playfield.svg`), a plum mission banner, editorial typography, and a desktop side illustration. Semantic color tokens in `src/style.css` support both themes. Dark is the first-visit default, even when the operating system prefers light. The navigation toggle saves `dark` or `light` under the origin-wide `game-hub-theme` key, which is independent of guest identity.
+
+A small inline head script selects the saved theme before paint. If storage is unavailable, dark remains the default and the toggle still works for the current page. `src/theme.js` also synchronizes other tabs. `src/illustration.js` updates the preview only in response to scroll or guest progress and while visible; reduced-motion mode displays a static final board. There is no autonomous animation loop or playable board in this phase.
+
+The hub’s [component guide](https://github.com/Kumori1313/game-hub/blob/main/docs/ui-components.md) documents matching styles, future screen sketches, and verification. Keep shared presentation files aligned across repositories until they are extracted into a package.

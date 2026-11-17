@@ -35,6 +35,7 @@ export function mountGuestEntry({ client, gamePage = false }) {
       ? (name ? 'You’re ready for Tic-Tac-Toe.' : 'Enter as a guest')
       : (name ? 'Choose your next game.' : 'What should we call you?');
     form.setAttribute('aria-busy', String(busy));
+    document.dispatchEvent(new CustomEvent('guest-state', { detail: { ready: Boolean(name) && ready && !busy && !editing } }));
   }
 
   function showError(message) {
