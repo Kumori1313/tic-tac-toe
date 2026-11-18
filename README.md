@@ -1,6 +1,6 @@
 # Tic-Tac-Toe
 
-The first game for [Game Hub](https://github.com/Kumori1313/game-hub). Guest entry is implemented: enter or change a display name, restore your anonymous session, and navigate between the hub and tic-tac-toe. Public lobbies and waiting rooms are implemented in the game site. Playable moves arrive in Phase 6.
+The first game for [Game Hub](https://github.com/Kumori1313/game-hub). Guest entry is implemented: enter or change a display name, restore your anonymous session, and navigate between the hub and tic-tac-toe. Public lobbies and waiting rooms are implemented in the game site. Two guests can now play a complete match, see the same result, and return to the hub.
 
 ## Local development
 
@@ -28,7 +28,7 @@ Configure `.env.local` with `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_K
 - `npm test`: run guest validation and session-service checks with Node’s built-in test runner.
 - `npm run check:backend`: verify local anonymous sign-in, identity, and restricted lobby Data API. Creates one local guest, then signs out; no hosted requests are allowed.
 
-Guest behavior is tested with Node’s built-in runner; no coverage threshold is configured. Local API integration tests cover lobby authorization and concurrency; move-validation tests arrive with gameplay. Never treat a successful build as gameplay validation.
+Guest behavior is tested with Node’s built-in runner; no coverage threshold is configured. The hub’s local API integration tests cover lobby/move authorization, all win lines, draws, duplicate submissions, and concurrent writes. Never treat a successful build as gameplay validation.
 
 ## Deployment
 
@@ -50,14 +50,20 @@ Production navigation uses the two project paths on the same origin, so the sess
 
 The shared visual language uses original SVG artwork (`public/art/playfield.svg`), a plum mission banner, editorial typography, and a desktop side illustration. Semantic color tokens in `src/style.css` support both themes. Dark is the first-visit default, even when the operating system prefers light. The navigation toggle saves `dark` or `light` under the origin-wide `game-hub-theme` key, which is independent of guest identity.
 
-A small inline head script selects the saved theme before paint. If storage is unavailable, dark remains the default and the toggle still works for the current page. `src/theme.js` also synchronizes other tabs. `src/illustration.js` updates the preview only in response to scroll or guest progress and while visible; reduced-motion mode displays a static final board. There is no autonomous animation loop or playable board in this phase.
+A small inline head script selects the saved theme before paint. If storage is unavailable, dark remains the default and the toggle still works for the current page. `src/theme.js` also synchronizes other tabs. `src/illustration.js` updates the preview only in response to scroll or guest progress and while visible; reduced-motion mode displays a static final board. There is no autonomous animation loop. During an actual match the decorative preview is hidden and the playable board takes the main column.
 
 The hub’s [component guide](https://github.com/Kumori1313/game-hub/blob/main/docs/ui-components.md) documents matching styles, future screen sketches, and verification. Keep shared presentation files aligned across repositories until they are extracted into a package.
 
 ## Public lobbies
 
-The tic-tac-toe site supports public discovery, creating/joining/leaving two-player rooms, host-only start, refresh recovery, connection feedback, and interruption. A started match is a verified shared session; gameplay is still in development. See the [lobby contract](https://github.com/Kumori1313/game-hub/blob/main/docs/lobby-contract.md) for API permissions, the 90-second lease, scheduled cleanup, and the seven-day retention policy.
+The tic-tac-toe site supports public discovery, creating/joining/leaving two-player rooms, host-only start, refresh recovery, connection feedback, and interruption. Started matches show a synchronized board with server-validated turns and results. See the [lobby contract](https://github.com/Kumori1313/game-hub/blob/main/docs/lobby-contract.md) for API permissions, the 90-second lease, scheduled cleanup, and the seven-day retention policy.
 
 ## Backend security
 
-The shared backend now validates moves and results transactionally; the playable board remains Phase 6. See the [hub security review](https://github.com/Kumori1313/game-hub/blob/main/docs/security-review.md) for the access model, limits, and local integration tests. Browser builds enforce a generated CSP and reject private credentials in frontend settings.
+The shared backend now validates moves and results transactionally; the playable board renders confirmed state. See the [hub security review](https://github.com/Kumori1313/game-hub/blob/main/docs/security-review.md) for the access model, limits, and local integration tests. Browser builds enforce a generated CSP and reject private credentials in frontend settings.
+
+## Playing and testing
+
+Select an empty cell on your turn. X moves first. Pending requests lock the board; refresh or reconnect restores confirmed state without replaying a move. Wins highlight three cells, draws lock the full board, and leaving during play interrupts it without awarding a result. After a match, return to the hub or lobbies and create/join a new room to play again. There is no rematch/reset control.
+
+The [gameplay contract](https://github.com/Kumori1313/game-hub/blob/main/docs/gameplay-contract.md) documents synchronization, accessible controls, recovery, retention, and the hub’s complete browser suite.

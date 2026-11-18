@@ -1,3 +1,5 @@
+import { mountBoard } from './board.js';
+
 export function mountLobbies(client) {
   const region = document.querySelector('#lobby-app');
   const status = document.querySelector('#lobby-status');
@@ -11,6 +13,7 @@ export function mountLobbies(client) {
   const leave = document.querySelector('#leave-lobby');
   const back = document.querySelector('#back-lobbies');
   const members = document.querySelector('#room-members');
+  const renderBoard = mountBoard(document.querySelector('#match-board'), submitMove);
   const connectionId = crypto.randomUUID();
   let userId = null;
   let roomId = null;
@@ -29,6 +32,10 @@ export function mountLobbies(client) {
   let lastView = '';
   let requestSequence = 0;
   let appliedSequence = 0;
+  let snapshotPending = false;
+  let nextSnapshotAt = 0;
+  let movePending = false;
+  let uncertainMove = false;
 
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   function message(text) { error.textContent = text; }
@@ -40,9 +47,10 @@ export function mountLobbies(client) {
     start.disabled = value || !navigator.onLine || !roomOnline || room?.members.length !== 2 || room?.members.some(m => !m.connected || (presenceReady && !present.has(m.user_id)));
     list.querySelectorAll('button').forEach(button => { button.disabled = value || !navigator.onLine || button.dataset.available !== 'true'; });
     region.setAttribute('aria-busy', String(value));
+    renderBoard({ room, userId, busy, online: navigator.onLine && roomOnline });
   }
   async function action(kind, id = roomId) {
-    const { data, error } = await client.rpc('lobby_action', { p_action: kind, p_lobby: id, p_connection: connectionId });
+    const { data, error } = await client.rpc('lobby_action', { p_action: kind, p_lobby: id, p_connection: connectionId }).abortSignal(AbortSignal.timeout(12000));
     if (error) throw error;
     return data;
   }
@@ -85,6 +93,17 @@ export function mountLobbies(client) {
     } catch { message('Couldn’t load lobbies. Try Refresh.'); }
     finally { refreshing = false; }
   }
+  function text(selector, value) {
+    const node = document.querySelector(selector);
+    if (node.textContent !== value) node.textContent = value;
+  }
+  function acceptSnapshot(snapshot) {
+    const rank = { waiting: 0, playing: 1, closed: 2, finished: 2 };
+    if (room && (rank[snapshot?.status] < rank[room.status]
+      || (room.match && snapshot?.match && snapshot.match.revision < room.match.revision))) return false;
+    room = snapshot;
+    return true;
+  }
   function renderRoom() {
     if (!room) return;
     const finished = room.status === 'finished';
@@ -92,15 +111,19 @@ export function mountLobbies(client) {
     const playing = room.status === 'playing';
     discovery.hidden = true;
     roomView.hidden = false;
-    document.querySelector('#room-title').textContent = finished ? 'Match finished' : playing ? 'Match ready' : terminal ? 'Lobby closed' : room.title;
-    document.querySelector('#room-message').textContent = finished ? (room.match?.winner ? `${room.match.winner} won.` : 'Draw.') : terminal ? room.reason : playing ? 'Gameplay is in development.' : room.members.length < 2 ? 'Waiting for another player.' : '';
-    document.querySelector('#room-connection').textContent = terminal ? '' : !navigator.onLine ? 'Offline. Reconnect to keep your seat.' : !roomOnline ? 'Reconnecting…' : '';
+    const mark = room.members.find(member => member.user_id === userId)?.mark;
+    text('#room-title', finished ? 'Match finished' : playing ? 'Tic-Tac-Toe' : terminal ? (room.match ? 'Match interrupted' : 'Lobby closed') : room.title);
+    text('#selection-title', playing || terminal ? 'Match' : 'Lobbies');
+    document.body.classList.toggle('match-active', Boolean(room.match));
+    document.querySelector('#selection-title').hidden = true;
+    text('#room-message', finished ? (room.match?.winner ? (room.match.winner === mark ? `You won (${mark}).` : `${room.match.winner} won.`) : 'Draw.') : terminal ? room.reason : playing ? (movePending ? 'Submitting move…' : room.match.current_turn === mark ? `Your turn (${mark}).` : `Waiting for ${room.match.current_turn}.`) : room.members.length < 2 ? 'Waiting for another player.' : '');
+    text('#room-connection', terminal ? '' : !navigator.onLine ? 'Offline. Reconnect to keep your seat.' : !roomOnline ? 'Reconnecting…' : '');
     members.replaceChildren();
     for (const member of [...room.members].sort((a, b) => a.mark === b.mark ? 0 : a.mark === 'X' ? -1 : 1)) {
       const item = element('li', '', 'member-row');
       const label = `${member.display_name}${member.user_id === userId ? ' (you)' : ''}`;
       const name = element('strong', label);
-      const details = element('span', `${member.mark}${member.user_id === room.host_id ? ' · Host' : ''} · ${member.connected && (!presenceReady || present.has(member.user_id)) ? 'Connected' : 'Reconnecting'}`, 'hint');
+      const details = element('span', `${member.mark}${member.user_id === room.host_id ? ' · Host' : ''}${terminal ? '' : ` · ${member.connected && (!presenceReady || present.has(member.user_id)) ? 'Connected' : 'Reconnecting'}`}`, 'hint');
       item.append(name, details); members.append(item);
     }
     start.hidden = terminal || playing || room.host_id !== userId;
@@ -111,26 +134,29 @@ export function mountLobbies(client) {
     const mode = finished ? 'finished' : terminal ? 'closed' : playing ? 'playing' : 'waiting';
     if (mode !== lastView) {
       lastView = mode;
-      if (playing) editUrl(roomId, true);
+      if (playing || finished) editUrl(roomId, true);
+      if (terminal) { clearInterval(heartbeatTimer); if (roomChannel) { const channel = roomChannel; roomChannel = null; client.removeChannel(channel); } }
       // Focus only on a screen transition; polling must not steal keyboard focus.
       document.querySelector('#room-title').focus({ preventScroll: true });
     }
   }
   async function refreshRoom(heartbeat = false) {
     if (!roomId || !userId || !navigator.onLine) return;
+    if (!heartbeat && snapshotPending) return;
+    if (!heartbeat) snapshotPending = true;
     const ticket = generation;
     const request = ++requestSequence;
     try {
       const snapshot = await action(heartbeat ? 'heartbeat' : 'snapshot');
       if (ticket !== generation || !roomId || request < appliedSequence) return;
       appliedSequence = request;
-      if (room && ({ waiting: 0, playing: 1, closed: 2, finished: 2 }[snapshot?.status] < { waiting: 0, playing: 1, closed: 2, finished: 2 }[room.status])) return;
       if (!snapshot || !snapshot.members?.some(m => m.user_id === userId)) throw new Error('Your seat is no longer available.');
-      room = snapshot;
+      acceptSnapshot(snapshot);
       roomOnline = true;
+      if (uncertainMove) { uncertainMove = false; message(''); }
       renderRoom();
     } catch (failure) {
-      if (ticket !== generation) return;
+      if (ticket !== generation || request < appliedSequence) return;
       roomOnline = false;
       if (failure.code === 'PT401') { document.dispatchEvent(new Event('guest-session-ended')); return; }
       if (failure.code === 'PT429') { message(failure.message); renderRoom(); return; }
@@ -138,7 +164,7 @@ export function mountLobbies(client) {
         message('Your lobby is no longer available. Choose another lobby.');
         await resetRoom();
       } else { renderRoom(); }
-    }
+    } finally { if (!heartbeat && ticket === generation) snapshotPending = false; }
   }
   async function resetRoom() {
     ++generation;
@@ -146,6 +172,12 @@ export function mountLobbies(client) {
     if (roomChannel) { await client.removeChannel(roomChannel); roomChannel = null; }
     delete region.dataset.presence;
     roomId = null; room = null; lastView = ''; presenceReady = false; present = new Set();
+    snapshotPending = false; nextSnapshotAt = 0;
+    renderBoard({ room, userId, busy, online: false });
+    text('#selection-title', 'Lobbies');
+    document.querySelector('#selection-title').hidden = false;
+    document.body.classList.remove('match-active');
+    movePending = false; uncertainMove = false;
     editUrl(null);
     roomView.hidden = true; discovery.hidden = false;
     await refreshList();
@@ -155,13 +187,15 @@ export function mountLobbies(client) {
     if (roomChannel) await client.removeChannel(roomChannel);
     clearInterval(roomTimer); clearInterval(heartbeatTimer);
     ++generation;
-    roomId = id; lastView = ''; presenceReady = false; present = new Set();
+    roomId = id; room = null; lastView = ''; presenceReady = false; present = new Set();
+    snapshotPending = false; nextSnapshotAt = 0;
     room = await action('heartbeat');
     if (!room?.members?.some(m => m.user_id === userId)) throw new Error('You are not a member of this lobby.');
-    editUrl(id, room.status === 'playing');
+    editUrl(id, ['playing','finished'].includes(room.status));
     status.textContent = '';
     roomOnline = true;
     renderRoom();
+    if (['closed','finished'].includes(room.status)) return;
     roomChannel = client.channel(`lobby:${id}`, { config: { private: true, presence: { key: connectionId, enabled: true } } });
     const channel = roomChannel;
     channel.on('presence', { event: 'sync' }, () => {
@@ -181,8 +215,38 @@ export function mountLobbies(client) {
         // Polling and heartbeats continue even when realtime is unavailable.
       }
     });
-    roomTimer = setInterval(() => refreshRoom(), 4000);
+    roomTimer = setInterval(() => {
+      if (['closed','finished'].includes(room?.status) || Date.now() < nextSnapshotAt) return;
+      nextSnapshotAt = Date.now() + (room?.status === 'playing' && !document.hidden ? 1000 : 4000);
+      refreshRoom();
+    }, 1000);
     heartbeatTimer = setInterval(() => refreshRoom(true), 15000);
+  }
+  async function submitMove(cell) {
+    const mark = room?.members.find(member => member.user_id === userId)?.mark;
+    if (busy || !roomOnline || !navigator.onLine || room?.status !== 'playing'
+      || room.match.current_turn !== mark || room.match.board[cell] !== null) return;
+    const id = roomId, ticket = generation, revision = room.match.revision;
+    movePending = true;
+    setBusy(true); message(''); renderRoom();
+    try {
+      const { data, error: failure } = await client.rpc('play_move', { p_lobby: id, p_cell: cell, p_revision: revision }).abortSignal(AbortSignal.timeout(12000));
+      if (failure) throw failure;
+      if (ticket !== generation) return;
+      acceptSnapshot(data); roomOnline = true;
+    } catch (failure) {
+      if (ticket !== generation) return;
+      if (failure.code === 'PT401') { document.dispatchEvent(new Event('guest-session-ended')); return; }
+      // A lost reply may follow a committed move. Re-read; never replay the click automatically.
+      roomOnline = false;
+      uncertainMove = !['40001', '42501', 'P0001', 'PT429'].includes(failure.code);
+      message(failure.code === '40001' ? 'The board changed. Choose your move again.'
+        : ['42501', 'P0001', 'PT429'].includes(failure.code) ? failure.message
+        : 'Move not confirmed. Checking the board…');
+      await refreshRoom();
+    } finally {
+      if (ticket === generation) { movePending = false; setBusy(false); renderRoom(); }
+    }
   }
   async function perform(task) {
     if (busy || !navigator.onLine) return;
