@@ -115,6 +115,7 @@ export function mountLobbies(client) {
     text('#room-title', finished ? 'Match finished' : playing ? 'Tic-Tac-Toe' : terminal ? (room.match ? 'Match interrupted' : 'Lobby closed') : room.title);
     text('#selection-title', playing || terminal ? 'Match' : 'Lobbies');
     document.body.classList.toggle('match-active', Boolean(room.match));
+    document.body.classList.toggle('match-playing', playing);
     document.querySelector('#selection-title').hidden = true;
     text('#room-message', finished ? (room.match?.winner ? (room.match.winner === mark ? `You won (${mark}).` : `${room.match.winner} won.`) : 'Draw.') : terminal ? room.reason : playing ? (movePending ? 'Submitting move…' : room.match.current_turn === mark ? `Your turn (${mark}).` : `Waiting for ${room.match.current_turn}.`) : room.members.length < 2 ? 'Waiting for another player.' : '');
     text('#room-connection', terminal ? '' : !navigator.onLine ? 'Offline. Reconnect to keep your seat.' : !roomOnline ? 'Reconnecting…' : '');
@@ -176,7 +177,7 @@ export function mountLobbies(client) {
     renderBoard({ room, userId, busy, online: false });
     text('#selection-title', 'Lobbies');
     document.querySelector('#selection-title').hidden = false;
-    document.body.classList.remove('match-active');
+    document.body.classList.remove('match-active', 'match-playing');
     movePending = false; uncertainMove = false;
     editUrl(null);
     roomView.hidden = true; discovery.hidden = false;
