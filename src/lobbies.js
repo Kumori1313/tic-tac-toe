@@ -13,6 +13,8 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
   const leave = document.querySelector('#leave-lobby');
   const back = document.querySelector('#back-lobbies');
   const members = document.querySelector('#room-members');
+  const addBot = document.querySelector('#add-bot');
+  const botControls = document.querySelector('#bot-controls');
   const rematch = document.querySelector('#rematch-game');
   const codeInput = document.querySelector('#room-code-input');
   const joinCode = document.querySelector('#join-code');
@@ -53,8 +55,10 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
     visibility.disabled = value; capacity.disabled = value || gameId === 'tic-tac-toe';
     rematch.disabled = value || !navigator.onLine || !roomOnline || room?.members.length !== 2 || room?.members.some(member => !member.connected);
     leave.disabled = value || !navigator.onLine;
-    start.disabled = value || !navigator.onLine || !roomOnline || !room?.playable || room?.members.length < (room?.min_players ?? 2) || room?.members.some(m => !m.connected || (presenceReady && !present.has(m.user_id)));
+    start.disabled = value || !navigator.onLine || !roomOnline || !room?.playable || room?.members.length < (room?.min_players ?? 2) || room?.members.some(m => !m.connected || (presenceReady && !m.is_bot && !present.has(m.user_id)));
     list.querySelectorAll('button').forEach(button => { button.disabled = value || !navigator.onLine || button.dataset.available !== 'true'; });
+    if (addBot) addBot.disabled = value || !navigator.onLine || !roomOnline || room?.members.length >= room?.capacity;
+    members.querySelectorAll('button').forEach(button => { button.disabled = value || !navigator.onLine || !roomOnline; });
     region.setAttribute('aria-busy', String(value));
     renderBoard({ room, userId, busy, online: navigator.onLine && roomOnline });
     renderGame({ room, userId, busy, online: navigator.onLine && roomOnline });
@@ -154,14 +158,27 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
     codeLabel.textContent = room.join_code ? `Room code: ${room.join_code.match(/.{1,4}/g).join('-')}` : '';
     text('#room-connection', terminal ? '' : !navigator.onLine ? 'Offline. Reconnect to keep your seat.' : !roomOnline ? 'Reconnecting…' : '');
     members.hidden = Boolean(room.poker);
-    members.replaceChildren();
-    for (const member of [...room.members].sort((a, b) => a.seat - b.seat)) {
-      const item = element('li', '', 'member-row');
-      const label = `${member.display_name}${member.user_id === userId ? ' (you)' : ''}`;
-      const name = element('strong', label);
-      const details = element('span', `${member.mark ?? `Seat ${member.seat}`}${member.user_id === room.host_id ? ' · Host' : ''}${terminal ? '' : ` · ${member.connected && (!presenceReady || present.has(member.user_id)) ? 'Connected' : 'Reconnecting'}`}`, 'hint');
-      item.append(name, details); members.append(item);
+    const memberIds = new Set(room.members.map(member => member.user_id));
+    for (const row of [...members.children]) if (!memberIds.has(row.dataset.userId)) row.remove();
+    for (const [index, member] of [...room.members].sort((a, b) => a.seat - b.seat).entries()) {
+      let item = [...members.children].find(row => row.dataset.userId === member.user_id);
+      if (!item) {
+        item = element('li', '', 'member-row'); item.dataset.userId = member.user_id;
+        item.append(element('strong', ''), element('span', '', 'hint'));
+        members.append(item);
+      }
+      item.querySelector('strong').textContent = `${member.display_name}${member.user_id === userId ? ' (you)' : ''}`;
+      item.querySelector('.hint').textContent = `${member.mark ?? `Seat ${member.seat}`}${member.is_bot ? ' · Bot' : member.user_id === room.host_id ? ' · Host' : ''}${terminal || member.is_bot ? '' : ` · ${member.connected && (!presenceReady || present.has(member.user_id)) ? 'Connected' : 'Reconnecting'}`}`;
+      const removable = member.is_bot && room.status === 'waiting' && room.host_id === userId;
+      let button = item.querySelector('button');
+      if (removable && !button) {
+        button = element('button', 'Remove', 'secondary'); button.type = 'button';
+        button.setAttribute('aria-label', `Remove ${member.display_name}`);
+        button.addEventListener('click', () => changeBot('remove', member.seat)); item.append(button);
+      } else if (!removable && button) button.remove();
+      if (members.children[index] !== item) members.insertBefore(item, members.children[index] ?? null);
     }
+    if (botControls) botControls.hidden = gameId !== 'poker' || room.status !== 'waiting' || room.host_id !== userId;
     start.hidden = terminal || playing || !room.playable || room.host_id !== userId;
     leave.hidden = terminal;
     back.hidden = !terminal;
@@ -359,6 +376,15 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
     acceptSnapshot(snapshot); renderRoom();
   }));
   refresh.addEventListener('click', () => perform(refreshList));
+  async function changeBot(kind, seat = null) {
+    await perform(async () => {
+      const { data, error: failure } = await client.rpc('poker_bot', { p_lobby: roomId, p_action: kind, p_seat: seat }).abortSignal(AbortSignal.timeout(12000));
+      if (failure) throw failure;
+      if (data?.error) throw { code: data.code, message: data.error };
+      acceptSnapshot(data); renderRoom();
+    });
+  }
+  addBot?.addEventListener('click', () => changeBot('add'));
   start.addEventListener('click', () => perform(async () => {
     if (gameId === 'poker') {
       const { data, error: failure } = await client.rpc('poker_action', { p_lobby: roomId, p_action: 'start' }).abortSignal(AbortSignal.timeout(12000));
