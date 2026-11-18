@@ -67,3 +67,7 @@ The shared backend now validates moves and results transactionally; the playable
 Select an empty cell on your turn. X moves first. Pending requests lock the board; refresh or reconnect restores confirmed state without replaying a move. Wins highlight three cells, draws lock the full board, and leaving during play interrupts it without awarding a result. After a match, return to the hub or lobbies and create/join a new room to play again. There is no rematch/reset control.
 
 The [gameplay contract](https://github.com/Kumori1313/game-hub/blob/main/docs/gameplay-contract.md) documents synchronization, accessible controls, recovery, retention, and the hub’s complete browser suite.
+
+## Release operations
+
+Run the hub’s `test:release` command with `GAME_SITE_DIR` pointing here. The [release runbook](https://github.com/Kumori1313/game-hub/blob/main/docs/release-runbook.md) covers deployment, rollback, monitoring, and cleanup; the [playtest guide](https://github.com/Kumori1313/game-hub/blob/main/docs/playtest-guide.md) covers real-device/group validation.
