@@ -71,3 +71,9 @@ The [gameplay contract](https://github.com/Kumori1313/game-hub/blob/main/docs/ga
 ## Release operations
 
 Run the hub’s `test:release` command with `GAME_SITE_DIR` pointing here. The [release runbook](https://github.com/Kumori1313/game-hub/blob/main/docs/release-runbook.md) covers deployment, rollback, monitoring, and cleanup; the [playtest guide](https://github.com/Kumori1313/game-hub/blob/main/docs/playtest-guide.md) covers real-device/group validation.
+
+## Shared rooms (milestone 8.1)
+
+Rooms can be public or code-only. Tic-tac-toe retains two seats; the poker lobby preview supports host-selected capacity from two to six. Completed tic-tac-toe games offer a rematch when both connected players agree. The initial X player is random, and rematches swap marks independently of hosting.
+
+The hub’s [shared room contract](https://github.com/Kumori1313/game-hub/blob/main/docs/shared-room-contract.md) documents the versioned API, previous-client compatibility, private codes, and round safety. Release checks now require both `GAME_SITE_DIR` and `POKER_SITE_DIR`, and verify all three repositories.

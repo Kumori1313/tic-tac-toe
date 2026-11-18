@@ -211,3 +211,10 @@ input[aria-invalid='true'] { border-color: var(--error); }
 /* Active play keeps navigation in the normal page flow. */
 .match-playing .site-header { position: relative; top: auto; }
 html:has(body.match-playing) { scroll-padding-top: 28px; }
+
+select { font: inherit; color: var(--text); background: var(--field); border: 1px solid var(--control-line); border-radius: 3px; min-height: 44px; padding: 10px 12px; width: 100%; margin-top: 8px; }
+select:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.room-settings { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 14px; }
+.code-entry { margin: 20px 0; }
+.room-code { font-family: ui-monospace, monospace; font-size: 14px; overflow-wrap: anywhere; }
+#rematch-status:empty { display: none; }

@@ -1,6 +1,6 @@
 import { mountBoard } from './board.js';
 
-export function mountLobbies(client) {
+export function mountLobbies(client, { gameId = 'tic-tac-toe' } = {}) {
   const region = document.querySelector('#lobby-app');
   const status = document.querySelector('#lobby-status');
   const error = document.querySelector('#lobby-error');
@@ -13,6 +13,11 @@ export function mountLobbies(client) {
   const leave = document.querySelector('#leave-lobby');
   const back = document.querySelector('#back-lobbies');
   const members = document.querySelector('#room-members');
+  const rematch = document.querySelector('#rematch-game');
+  const codeInput = document.querySelector('#room-code-input');
+  const joinCode = document.querySelector('#join-code');
+  const visibility = document.querySelector('#room-visibility');
+  const capacity = document.querySelector('#room-capacity');
   const renderBoard = mountBoard(document.querySelector('#match-board'), submitMove);
   const connectionId = crypto.randomUUID();
   let userId = null;
@@ -43,15 +48,19 @@ export function mountLobbies(client) {
     busy = value;
     create.disabled = value || !navigator.onLine;
     refresh.disabled = value || !navigator.onLine;
+    joinCode.disabled = value || !navigator.onLine;
+    visibility.disabled = value; capacity.disabled = value || gameId === 'tic-tac-toe';
+    rematch.disabled = value || !navigator.onLine || !roomOnline || room?.members.length !== 2 || room?.members.some(member => !member.connected);
     leave.disabled = value || !navigator.onLine;
-    start.disabled = value || !navigator.onLine || !roomOnline || room?.members.length !== 2 || room?.members.some(m => !m.connected || (presenceReady && !present.has(m.user_id)));
+    start.disabled = value || !navigator.onLine || !roomOnline || !room?.playable || room?.members.length < (room?.min_players ?? 2) || room?.members.some(m => !m.connected || (presenceReady && !present.has(m.user_id)));
     list.querySelectorAll('button').forEach(button => { button.disabled = value || !navigator.onLine || button.dataset.available !== 'true'; });
     region.setAttribute('aria-busy', String(value));
     renderBoard({ room, userId, busy, online: navigator.onLine && roomOnline });
   }
-  async function action(kind, id = roomId) {
-    const { data, error } = await client.rpc('lobby_action', { p_action: kind, p_lobby: id, p_connection: connectionId }).abortSignal(AbortSignal.timeout(12000));
+  async function action(kind, id = roomId, options = {}) {
+    const { data, error } = await client.rpc('room_action', { p_action: kind, p_lobby: id, p_connection: connectionId, p_game: gameId, ...options }).abortSignal(AbortSignal.timeout(12000));
     if (error) throw error;
+    if (data?.error) throw { code: data.code, message: data.error };
     return data;
   }
   function editUrl(id, match = false) {
@@ -71,23 +80,37 @@ export function mountLobbies(client) {
     refreshing = true;
     try {
       const { data, error: failure } = await client.from('lobby_summaries').select('id,title,player_count,capacity,status,game_id')
-        .eq('game_id', 'tic-tac-toe').in('status', ['waiting', 'playing']).order('created_at', { ascending: false }).limit(50);
+        .eq('game_id', gameId).in('status', ['waiting', 'playing']).order('created_at', { ascending: false }).limit(50);
       if (failure) throw failure;
-      list.replaceChildren();
-      for (const lobby of data) {
-        const row = element('li', '', 'lobby-row');
-        const description = element('div', '', 'lobby-description');
-        description.append(element('strong', lobby.title), element('span', `${lobby.player_count}/${lobby.capacity} · ${lobby.status === 'playing' ? 'In progress' : 'Waiting'}`, 'hint'));
-        const button = element('button', lobby.status === 'playing' ? 'In progress' : lobby.player_count >= 2 ? 'Full' : 'Join', 'secondary');
-        button.type = 'button';
-        button.dataset.available = String(lobby.status === 'waiting' && lobby.player_count < 2);
+      const visibleIds = new Set(data.map(lobby => lobby.id));
+      for (const row of [...list.children]) if (!visibleIds.has(row.dataset.lobbyId)) row.remove();
+      for (const [index, lobby] of data.entries()) {
+        let row = list.querySelector(`[data-lobby-id="${lobby.id}"]`);
+        if (!row) {
+          row = element('li', '', 'lobby-row');
+          row.dataset.lobbyId = lobby.id;
+          const description = element('div', '', 'lobby-description');
+          description.append(element('strong', ''), element('span', '', 'hint'));
+          const button = element('button', '', 'secondary');
+          button.type = 'button';
+          button.addEventListener('click', () => perform(async () => {
+            const joined = await action('join', lobby.id);
+            await enterRoom(joined.id);
+          }));
+          row.append(description, button);
+        }
+        const title = row.querySelector('strong');
+        if (title.textContent !== lobby.title) title.textContent = lobby.title;
+        const detail = `${lobby.player_count}/${lobby.capacity} · ${lobby.status === 'playing' ? 'In progress' : 'Waiting'}`;
+        const hint = row.querySelector('.hint');
+        if (hint.textContent !== detail) hint.textContent = detail;
+        const button = row.querySelector('button');
+        const label = lobby.status === 'playing' ? 'In progress' : lobby.player_count >= lobby.capacity ? 'Full' : 'Join';
+        if (button.textContent !== label) button.textContent = label;
+        button.dataset.available = String(lobby.status === 'waiting' && lobby.player_count < lobby.capacity);
         button.disabled = busy || button.dataset.available !== 'true';
-        button.addEventListener('click', () => perform(async () => {
-          const joined = await action('join', lobby.id);
-          await enterRoom(joined.id);
-        }));
-        row.dataset.lobbyId = lobby.id;
-        row.append(description, button); list.append(row);
+        // Preserve controls during realtime refreshes, including between pointer down/up.
+        if (list.children[index] !== row) list.insertBefore(row, list.children[index] ?? null);
       }
       status.textContent = data.length ? '' : 'No public lobbies. Create one to host.';
     } catch { message('Couldn’t load lobbies. Try Refresh.'); }
@@ -99,8 +122,8 @@ export function mountLobbies(client) {
   }
   function acceptSnapshot(snapshot) {
     const rank = { waiting: 0, playing: 1, closed: 2, finished: 2 };
-    if (room && (rank[snapshot?.status] < rank[room.status]
-      || (room.match && snapshot?.match && snapshot.match.revision < room.match.revision))) return false;
+    if (room && (snapshot?.round < room.round || (snapshot?.round === room.round && (rank[snapshot?.status] < rank[room.status]
+      || (room.match && snapshot?.match && snapshot.match.revision < room.match.revision))))) return false;
     room = snapshot;
     return true;
   }
@@ -112,31 +135,39 @@ export function mountLobbies(client) {
     discovery.hidden = true;
     roomView.hidden = false;
     const mark = room.members.find(member => member.user_id === userId)?.mark;
-    text('#room-title', finished ? 'Match finished' : playing ? 'Tic-Tac-Toe' : terminal ? (room.match ? 'Match interrupted' : 'Lobby closed') : room.title);
+    text('#room-title', finished ? 'Match finished' : playing ? (gameId === 'poker' ? 'Poker' : 'Tic-Tac-Toe') : terminal ? (room.match ? 'Match interrupted' : 'Lobby closed') : room.title);
     text('#selection-title', playing || terminal ? 'Match' : 'Lobbies');
     document.body.classList.toggle('match-active', Boolean(room.match));
     document.body.classList.toggle('match-playing', playing);
     document.querySelector('#selection-title').hidden = true;
     text('#room-message', finished ? (room.match?.winner ? (room.match.winner === mark ? `You won (${mark}).` : `${room.match.winner} won.`) : 'Draw.') : terminal ? room.reason : playing ? (movePending ? 'Submitting move…' : room.match.current_turn === mark ? `Your turn (${mark}).` : `Waiting for ${room.match.current_turn}.`) : room.members.length < 2 ? 'Waiting for another player.' : '');
+    const ownVote = room.members.find(member => member.user_id === userId)?.rematch;
+    rematch.hidden = !finished || gameId !== 'tic-tac-toe';
+    rematch.textContent = ownVote ? 'Cancel rematch' : 'Rematch';
+    text('#rematch-status', !finished ? '' : room.members.length < 2 ? 'Opponent left.' : ownVote ? 'Waiting for opponent to accept.' : room.members.some(member => member.rematch) ? 'Opponent requested a rematch.' : '');
+    const codeLabel = document.querySelector('#room-code');
+    codeLabel.hidden = !room.join_code;
+    codeLabel.textContent = room.join_code ? `Room code: ${room.join_code.match(/.{1,4}/g).join('-')}` : '';
+    if (!room.playable && !terminal) text('#room-message', 'Poker gameplay is not available yet.');
     text('#room-connection', terminal ? '' : !navigator.onLine ? 'Offline. Reconnect to keep your seat.' : !roomOnline ? 'Reconnecting…' : '');
     members.replaceChildren();
-    for (const member of [...room.members].sort((a, b) => a.mark === b.mark ? 0 : a.mark === 'X' ? -1 : 1)) {
+    for (const member of [...room.members].sort((a, b) => a.seat - b.seat)) {
       const item = element('li', '', 'member-row');
       const label = `${member.display_name}${member.user_id === userId ? ' (you)' : ''}`;
       const name = element('strong', label);
-      const details = element('span', `${member.mark}${member.user_id === room.host_id ? ' · Host' : ''}${terminal ? '' : ` · ${member.connected && (!presenceReady || present.has(member.user_id)) ? 'Connected' : 'Reconnecting'}`}`, 'hint');
+      const details = element('span', `${member.mark ?? `Seat ${member.seat}`}${member.user_id === room.host_id ? ' · Host' : ''}${terminal ? '' : ` · ${member.connected && (!presenceReady || present.has(member.user_id)) ? 'Connected' : 'Reconnecting'}`}`, 'hint');
       item.append(name, details); members.append(item);
     }
-    start.hidden = terminal || playing || room.host_id !== userId;
+    start.hidden = terminal || playing || !room.playable || room.host_id !== userId;
     leave.hidden = terminal;
     back.hidden = !terminal;
     leave.textContent = playing ? 'Leave match' : 'Leave lobby';
     setBusy(busy);
-    const mode = finished ? 'finished' : terminal ? 'closed' : playing ? 'playing' : 'waiting';
+    const mode = `${room.round}:${finished ? 'finished' : terminal ? 'closed' : playing ? 'playing' : 'waiting'}`;
     if (mode !== lastView) {
       lastView = mode;
       if (playing || finished) editUrl(roomId, true);
-      if (terminal) { clearInterval(heartbeatTimer); if (roomChannel) { const channel = roomChannel; roomChannel = null; client.removeChannel(channel); } }
+      if (room.status === 'closed') { clearInterval(heartbeatTimer); if (roomChannel) { const channel = roomChannel; roomChannel = null; client.removeChannel(channel); } }
       // Focus only on a screen transition; polling must not steal keyboard focus.
       document.querySelector('#room-title').focus({ preventScroll: true });
     }
@@ -178,6 +209,7 @@ export function mountLobbies(client) {
     text('#selection-title', 'Lobbies');
     document.querySelector('#selection-title').hidden = false;
     document.body.classList.remove('match-active', 'match-playing');
+    if (movePending) setBusy(false);
     movePending = false; uncertainMove = false;
     editUrl(null);
     roomView.hidden = true; discovery.hidden = false;
@@ -196,7 +228,7 @@ export function mountLobbies(client) {
     status.textContent = '';
     roomOnline = true;
     renderRoom();
-    if (['closed','finished'].includes(room.status)) return;
+    if (room.status === 'closed') return;
     roomChannel = client.channel(`lobby:${id}`, { config: { private: true, presence: { key: connectionId, enabled: true } } });
     const channel = roomChannel;
     channel.on('presence', { event: 'sync' }, () => {
@@ -217,7 +249,7 @@ export function mountLobbies(client) {
       }
     });
     roomTimer = setInterval(() => {
-      if (['closed','finished'].includes(room?.status) || Date.now() < nextSnapshotAt) return;
+      if (room?.status === 'closed' || Date.now() < nextSnapshotAt) return;
       nextSnapshotAt = Date.now() + (room?.status === 'playing' && !document.hidden ? 1000 : 4000);
       refreshRoom();
     }, 1000);
@@ -227,11 +259,11 @@ export function mountLobbies(client) {
     const mark = room?.members.find(member => member.user_id === userId)?.mark;
     if (busy || !roomOnline || !navigator.onLine || room?.status !== 'playing'
       || room.match.current_turn !== mark || room.match.board[cell] !== null) return;
-    const id = roomId, ticket = generation, revision = room.match.revision;
+    const id = roomId, ticket = generation, revision = room.match.revision, matchId = room.match.id;
     movePending = true;
     setBusy(true); message(''); renderRoom();
     try {
-      const { data, error: failure } = await client.rpc('play_move', { p_lobby: id, p_cell: cell, p_revision: revision }).abortSignal(AbortSignal.timeout(12000));
+      const { data, error: failure } = await client.rpc('submit_move', { p_lobby: id, p_cell: cell, p_revision: revision, p_match: matchId }).abortSignal(AbortSignal.timeout(12000));
       if (failure) throw failure;
       if (ticket !== generation) return;
       acceptSnapshot(data); roomOnline = true;
@@ -255,7 +287,7 @@ export function mountLobbies(client) {
     try { await task(); }
     catch (failure) {
       if (failure.code === 'PT401') { document.dispatchEvent(new Event('guest-session-ended')); return; }
-      message(['P0001', 'P0002', '42501', 'PT429'].includes(failure.code) ? failure.message : 'Couldn’t update the lobby. Check your connection and try again.');
+      message(['P0001', 'P0002', '42501', 'PT429', '22023', 'ROOM_UNAVAILABLE'].includes(failure.code) ? failure.message : 'Couldn’t update the lobby. Check your connection and try again.');
       if (roomId && !room) await resetRoom();
       else if (!roomId) refreshList();
     } finally { setBusy(false); }
@@ -291,7 +323,16 @@ export function mountLobbies(client) {
       if (discoveryChannel) { client.removeChannel(discoveryChannel); discoveryChannel = null; }
     }
   });
-  create.addEventListener('click', () => perform(async () => { const id = await action('create', null); await enterRoom(id); }));
+  create.addEventListener('click', () => perform(async () => { const id = await action('create', null, { p_capacity: Number(capacity.value), p_visibility: visibility.value }); await enterRoom(id); }));
+  document.querySelector('#join-code-form').addEventListener('submit', event => {
+    event.preventDefault();
+    perform(async () => { const joined = await action('join_code', null, { p_code: codeInput.value }); await enterRoom(joined.id); codeInput.value = ''; });
+  });
+  rematch.addEventListener('click', () => perform(async () => {
+    const ownVote = room.members.find(member => member.user_id === userId)?.rematch;
+    const snapshot = await action(ownVote ? 'cancel_rematch' : 'rematch', roomId, { p_round: room.round });
+    acceptSnapshot(snapshot); renderRoom();
+  }));
   refresh.addEventListener('click', () => perform(refreshList));
   start.addEventListener('click', () => perform(async () => { await action('start'); await refreshRoom(); }));
   leave.addEventListener('click', () => perform(async () => {
