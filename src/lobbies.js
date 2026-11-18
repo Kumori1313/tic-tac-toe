@@ -1,6 +1,6 @@
 import { mountBoard } from './board.js';
 
-export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null } = {}) {
+export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null, tableSettings = null } = {}) {
   const region = document.querySelector('#lobby-app');
   const status = document.querySelector('#lobby-status');
   const error = document.querySelector('#lobby-error');
@@ -49,6 +49,7 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
   function message(text) { error.textContent = text; }
   function setBusy(value) {
     busy = value;
+    tableSettings?.setBusy(value || !navigator.onLine);
     create.disabled = value || !navigator.onLine;
     refresh.disabled = value || !navigator.onLine;
     joinCode.disabled = value || !navigator.onLine;
@@ -148,7 +149,7 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
     document.body.classList.toggle('match-playing', playing && (gameId !== 'poker' || room.poker?.street !== 'complete'));
     document.querySelector('#selection-title').hidden = true;
     document.querySelector('#room-title').hidden = Boolean(room.poker);
-    text('#room-message', gameId === 'poker' ? (room.status === 'closed' ? room.reason : room.poker ? '' : '1,000 play chips · 10/20 blinds · 30-second turns') : finished ? (room.match?.winner ? (room.match.winner === mark ? `You won (${mark}).` : `${room.match.winner} won.`) : 'Draw.') : terminal ? room.reason : playing ? (movePending ? 'Submitting move…' : room.match.current_turn === mark ? `Your turn (${mark}).` : `Waiting for ${room.match.current_turn}.`) : room.members.length < 2 ? 'Waiting for another player.' : '');
+    text('#room-message', gameId === 'poker' ? (room.status === 'closed' ? room.reason : room.poker ? '' : (tableSettings?.describe(room.settings) ?? '1,000 play chips · 10/20 blinds · 30-second turns')) : finished ? (room.match?.winner ? (room.match.winner === mark ? `You won (${mark}).` : `${room.match.winner} won.`) : 'Draw.') : terminal ? room.reason : playing ? (movePending ? 'Submitting move…' : room.match.current_turn === mark ? `Your turn (${mark}).` : `Waiting for ${room.match.current_turn}.`) : room.members.length < 2 ? 'Waiting for another player.' : '');
     const ownVote = room.members.find(member => member.user_id === userId)?.rematch;
     rematch.hidden = !finished || gameId !== 'tic-tac-toe';
     rematch.textContent = ownVote ? 'Cancel rematch' : 'Rematch';
@@ -308,7 +309,7 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
     const ticket = generation, hand = room.poker.hand_id, revision = room.poker.revision;
     movePending = true; setBusy(true); message('');
     try {
-      const { data, error: failure } = await client.rpc('poker_action', { p_lobby: roomId, p_action: kind, p_hand: hand, p_revision: revision, p_amount: amount ?? null }).abortSignal(AbortSignal.timeout(12000));
+      const { data, error: failure } = await client.rpc('poker_table_action', { p_lobby: roomId, p_action: kind, p_hand: hand, p_revision: revision, p_amount: amount ?? null }).abortSignal(AbortSignal.timeout(12000));
       if (failure) throw failure;
       if (data?.error) throw { code: data.code, message: data.error };
       if (ticket !== generation) return;
@@ -365,7 +366,17 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
       if (discoveryChannel) { client.removeChannel(discoveryChannel); discoveryChannel = null; }
     }
   });
-  create.addEventListener('click', () => perform(async () => { const id = await action('create', null, { p_capacity: Number(capacity.value), p_visibility: visibility.value }); await enterRoom(id); }));
+  create.addEventListener('click', () => {
+    const settings = tableSettings?.read(); if (tableSettings && !settings) return;
+    perform(async () => {
+      let id;
+      if (gameId === 'poker' && tableSettings) {
+        const {data,error:failure} = await client.rpc('create_poker_room', { p_capacity:Number(capacity.value),p_visibility:visibility.value,p_settings:settings,p_connection:connectionId }).abortSignal(AbortSignal.timeout(12000));
+        if (failure) throw failure; id=data;tableSettings.save();
+      } else id=await action('create',null,{p_capacity:Number(capacity.value),p_visibility:visibility.value});
+      await enterRoom(id);
+    });
+  });
   document.querySelector('#join-code-form').addEventListener('submit', event => {
     event.preventDefault();
     perform(async () => { const joined = await action('join_code', null, { p_code: codeInput.value }); await enterRoom(joined.id); codeInput.value = ''; });
@@ -387,13 +398,13 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
   addBot?.addEventListener('click', () => changeBot('add'));
   start.addEventListener('click', () => perform(async () => {
     if (gameId === 'poker') {
-      const { data, error: failure } = await client.rpc('poker_action', { p_lobby: roomId, p_action: 'start' }).abortSignal(AbortSignal.timeout(12000));
+      const { data, error: failure } = await client.rpc('poker_table_action', { p_lobby: roomId, p_action: 'start' }).abortSignal(AbortSignal.timeout(12000));
       if (failure) throw failure;
       acceptSnapshot(data); renderRoom();
     } else { await action('start'); await refreshRoom(); }
   }));
   leave.addEventListener('click', () => perform(async () => {
-    if (room?.status === 'playing' && !confirm(gameId === 'poker' ? 'Leave this table? Your hand will fold unless you are already all-in.' : 'Leave this match? It will end for both players.')) return;
+    if (room?.status === 'playing' && !confirm(gameId === 'poker' ? (room.poker?.street === 'complete' ? 'Leave this table?' : 'Leave this table? Your hand will fold unless you are already all-in.') : 'Leave this match? It will end for both players.')) return;
     await action('leave'); await resetRoom();
     create.focus();
   }));
@@ -404,7 +415,7 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null 
       if (!roomId || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
       event.preventDefault();
       perform(async () => {
-        if (room?.status === 'playing' && !confirm(gameId === 'poker' ? 'Leave this table? Your hand will fold unless you are already all-in.' : 'Leave this match? It will end for both players.')) return;
+        if (room?.status === 'playing' && !confirm(gameId === 'poker' ? (room.poker?.street === 'complete' ? 'Leave this table?' : 'Leave this table? Your hand will fold unless you are already all-in.') : 'Leave this match? It will end for both players.')) return;
         await action('leave');
         location.assign(link.href);
       });
