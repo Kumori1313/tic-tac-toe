@@ -20,6 +20,11 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null,
   const joinCode = document.querySelector('#join-code');
   const visibility = document.querySelector('#room-visibility');
   const capacity = document.querySelector('#room-capacity');
+  const longCode = document.querySelector('#room-long-code');
+  const longCodeOption = longCode.parentElement;
+  const showLongCodeOption = () => { longCodeOption.hidden = visibility.value !== 'private'; };
+  visibility.addEventListener('change', showLongCodeOption);
+  showLongCodeOption();
   const renderGame = mountGame?.(document.querySelector('#game-table'), submitPoker) ?? (() => {});
   const renderBoard = mountBoard(document.querySelector('#match-board'), submitMove);
   const connectionId = crypto.randomUUID();
@@ -54,6 +59,7 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null,
     refresh.disabled = value || !navigator.onLine;
     joinCode.disabled = value || !navigator.onLine;
     visibility.disabled = value; capacity.disabled = value || gameId === 'tic-tac-toe';
+    longCode.disabled = value;
     rematch.disabled = value || !navigator.onLine || !roomOnline || room?.members.length !== 2 || room?.members.some(member => !member.connected);
     leave.disabled = value || !navigator.onLine;
     start.disabled = value || !navigator.onLine || !roomOnline || !room?.playable || room?.members.length < (room?.min_players ?? 2) || room?.members.some(m => !m.connected || (presenceReady && !m.is_bot && !present.has(m.user_id)));
@@ -369,11 +375,17 @@ export function mountLobbies(client, { gameId = 'tic-tac-toe', mountGame = null,
   create.addEventListener('click', () => {
     const settings = tableSettings?.read(); if (tableSettings && !settings) return;
     perform(async () => {
+      const options = { p_capacity: Number(capacity.value), p_visibility: visibility.value };
+      if (visibility.value === 'private' && longCode.checked) options.p_long_code = true;
       let id;
       if (gameId === 'poker' && tableSettings) {
-        const {data,error:failure} = await client.rpc('create_poker_room', { p_capacity:Number(capacity.value),p_visibility:visibility.value,p_settings:settings,p_connection:connectionId }).abortSignal(AbortSignal.timeout(12000));
-        if (failure) throw failure; id=data;tableSettings.save();
-      } else id=await action('create',null,{p_capacity:Number(capacity.value),p_visibility:visibility.value});
+        const { data, error: failure } = await client.rpc('create_poker_room', {
+          ...options, p_settings: settings, p_connection: connectionId,
+        }).abortSignal(AbortSignal.timeout(12000));
+        if (failure) throw failure;
+        id = data;
+        tableSettings.save();
+      } else id = await action('create', null, options);
       await enterRoom(id);
     });
   });
